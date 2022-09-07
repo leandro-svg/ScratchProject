@@ -6,7 +6,7 @@ class Test_2():
         self.test = True
         print("We reached it")
 
-    def is_working():
+    def is_working_2():
         print("Yeah it is.")
 
 if __name__ == '__main__':

@@ -3,8 +3,9 @@ import torchvision
 import numpy
 import sys
 from model.LeandDetect import LeandroDetect
+from LeandDetect_2 import LeandroDetect_2
+from test_class import Test
 
-from .
 class Visualizer():
     def __init__(self):
         super().__init__()
@@ -48,6 +49,10 @@ if __name__ == '__main__':
 
     detector = LeandroDetect()
     print("detector", detector)
+
+    test = Test()
+    test.is_working()
+    leandrodetect2  = LeandroDetect_2()
 
     
 
