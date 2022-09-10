@@ -6,7 +6,8 @@ from sklearn.metrics import classification_report
 from torch.utils.data import random_split
 from torch.utils.data import DataLoader
 from torchvision.datasets import KMNIST
-from torchvision.transforms import ToTensor
+from torchvision import transforms
+from torchvision.transforms import ToTensor, RandomRotation
 from torch.optim import Adam
 from torch import nn
 import matplotlib.pyplot as plt
@@ -30,6 +31,7 @@ class Trainer():
         if torch.cuda.device_count() == 0:
             print('[INFO] No GPUs detected. Exiting...')
 
+        print(args.not_cuda)
         if torch.cuda.is_available():
             if not args.not_cuda:
                 print("[INFO] CUDA device will be used")
@@ -59,15 +61,26 @@ class Trainer():
 
 
     def DataLoading(self):
+
+        if args.augment:
+            transform = transforms.Compose([
+                RandomRotation(degrees=(0, 180)),
+                ToTensor(),
+                transforms.ColorJitter(brightness=.5, hue=.3),
+            ])
+        else:
+            transform = transforms.Compose([
+                ToTensor(),
+            ])
         if self.dataset == "KMNIST" : 
             print("[INFO] loading the KMINST data...")
-            self.trainData = KMNIST(root="data", train=True, download=True, transform=ToTensor())
-            self.testData = KMNIST(root="data", train=False, download=True, transform=ToTensor())
+            self.trainData = KMNIST(root="data", train=True, download=True, transform=transform)
+            self.testData = KMNIST(root="data", train=False, download=True, transform=transform)
         else : 
             print("[INFO] Other dataset will be added and code will be adapted. Use KMNIST for now.")
             exit(1)
 
-        print("[INFO] generating the train/validatiion split...")
+        print("[INFO] generating the train/validation split...")
 
         numTrainSamples = int(len(self.trainData)*args.TRAIN_SPLIT)
         numValSamples = int(len(self.trainData)*args.VAL_SPLIT)
@@ -90,12 +103,14 @@ class Trainer():
             "val_acc" : []
         }
         
-        #TO BE DONE : DATA AUGMENTATION
+        
 
     def modelLoader(self):
         print("[INFO] Initializing the ConvNet model")
 
         self.model = ConvNet(num_channels=1, classes=len(self.trainData.dataset.classes))
+
+        #To be done : Be able to stop training, save weights and begin again later on
 
         if not args.not_cuda:
             self.model.to("cuda")
@@ -155,7 +170,7 @@ class Trainer():
             self.H["train_loss"].append(avgTrainLoss.cpu().detach().numpy())
             self.H["train_acc"].append(trainCorrect)
             self.H["val_loss"].append(avgValLoss.cpu().detach().numpy())
-            self.H["val_loss"].append(valCorrect)
+            self.H["val_acc"].append(valCorrect)
 
             print("[INFO] EPOCH: {}/{}".format(e + 1, args.EPOCH))
             print("Train loss : {:.6f}, Train accuracay : {:.4f}".format(
@@ -234,7 +249,8 @@ def get_parser():
     ap.add_argument("--use_plot", action="store_true")
     ap.add_argument("--dataset", default=None, type=str)
     ap.add_argument("--autoscale", action="store_true")
-    ap.add_argument("--not_cuda", action="store_false")
+    ap.add_argument("--not_cuda", action="store_true")
+    ap.add_argument("--augment", action="store_true")
     args = ap.parse_args()
     return args
 
