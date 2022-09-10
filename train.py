@@ -1,6 +1,5 @@
 import matplotlib
 matplotlib.use("Agg")
-
 from model.ConvNet import ConvNet
 from sklearn.metrics import classification_report
 from torch.utils.data import random_split
@@ -32,7 +31,6 @@ class Trainer():
         if torch.cuda.device_count() == 0:
             print('[INFO] No GPUs detected. Exiting...')
 
-        print(args.not_cuda)
         if torch.cuda.is_available():
             if not args.not_cuda:
                 print("[INFO] CUDA device will be used")
@@ -279,7 +277,6 @@ def get_parser():
     ap.add_argument("--opt", type=str, default="Adam")
     ap.add_argument("--lossFn", type=str, default="NLL")
     ap.add_argument("--interrupt", type=str, default="./output")
-    ap.add_argument("--max_iter", type=int, default=1e10)
 
     args = ap.parse_args()
     return args
