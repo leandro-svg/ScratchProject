@@ -8,7 +8,7 @@ from torch.utils.data import DataLoader
 from torchvision.datasets import KMNIST
 from torchvision import transforms
 from torchvision.transforms import ToTensor, RandomRotation
-from torch.optim import Adam
+from torch.optim import Adam, SGD
 from torch import nn
 import matplotlib.pyplot as plt
 import numpy as numpy
@@ -16,6 +16,7 @@ import numpy as np
 import argparse
 import torch
 import time
+from utils.functions import  SavePath
 
 
 
@@ -88,9 +89,9 @@ class Trainer():
                                 [numTrainSamples, numValSamples],
                                 generator = torch.Generator().manual_seed(42))
 
-        self.trainDataLoader = DataLoader(self.trainData, shuffle=True, batch_size = args.BATCH_SIZE)
-        self.valDataLoader = DataLoader(valData, shuffle=False, batch_size = args.BATCH_SIZE)
-        self.testDataLoader = DataLoader(self.testData, shuffle=False, batch_size = args.BATCH_SIZE)
+        self.trainDataLoader = DataLoader(self.trainData, shuffle=True, batch_size = args.BATCH_SIZE, num_workers=args.num_workers)
+        self.valDataLoader = DataLoader(valData, shuffle=False, batch_size = args.BATCH_SIZE, num_workers=args.num_workers)
+        self.testDataLoader = DataLoader(self.testData, shuffle=False, batch_size = args.BATCH_SIZE, num_workers=args.num_workers)
 
 
         self.trainSteps = len(self.trainDataLoader.dataset) // args.BATCH_SIZE
@@ -102,8 +103,6 @@ class Trainer():
             "val_loss" : [],
             "val_acc" : []
         }
-        
-        
 
     def modelLoader(self):
         print("[INFO] Initializing the ConvNet model")
@@ -116,69 +115,91 @@ class Trainer():
             self.model.to("cuda")
         else:
             self.model.to("cpu")
+        if args.opt == "Adam":
+                self.opt = Adam(self.model.parameters(), lr=self.lr, weight_decay = args.decay, amsgrad = args.amsgrad)
+        elif args.opt == "SGD":
+            self.opt = SGD(self.model.parameters(), lr=self.lr, weight_decay = args.decay, momentum = args.momentum)
 
-        self.opt = Adam(self.model.parameters(), lr=self.lr)
-        self.lossFn = nn.NLLLoss()
+        if args.lossFn == "NLL":
+            self.lossFn = nn.NLLLoss()
+        elif args.lossFn == "CrossEntropy":
+            self.lossFn = nn.CrossEntropyLoss()
 
     def training(self):
+
         trainer.DataLoading()
         trainer.modelLoader()
 
+        save_path = lambda epoch, iteration: SavePath("model", epoch, iteration).get_path(root=args.interrupt)
+
         print("[INFO] training our neural network...")
         startTime = time.time()
+        try:
+            for e in range(0, args.EPOCH):
+                self.model.train()
 
-        for e in range(0, args.EPOCH):
-            self.model.train()
+                totalTrainLoss = 0
+                totalValLoss = 0
 
-            totalTrainLoss = 0
-            totalValLoss = 0
-
-            trainCorrect = 0
-            valCorrect = 0
-
-            for (x,y) in self.trainDataLoader:
-                (x,y) = (x.to(self.device), y.to(self.device))
-
-                pred =  self.model(x)
-                loss = self.lossFn(pred, y)
-
-                self.opt.zero_grad()
-                loss.backward()
-                self.opt.step()
-
-                totalTrainLoss += loss
-                trainCorrect += (pred.argmax(1) == y).type(
-                    torch.float).sum().item()
-            with torch.no_grad():
-                self.model.eval()
-
-                for (x,y) in self.valDataLoader:
+                trainCorrect = 0
+                valCorrect = 0
+                iteration = 0
+                for (x,y) in self.trainDataLoader:
+                    if iteration == args.max_iter:
+                        break
+                    
                     (x,y) = (x.to(self.device), y.to(self.device))
 
-                    pred = self.model(x)
-                    totalValLoss += self.lossFn(pred, y)
+                    #To be done : Data parrallelism
+                    pred =  self.model(x)
+                    loss = self.lossFn(pred, y)
 
-                    valCorrect += (pred.argmax(1) == y).type(
+                    self.opt.zero_grad()
+                    loss.backward()
+                    if torch.isfinite(loss).item():
+                        self.opt.step()
+
+                    totalTrainLoss += loss
+                    trainCorrect += (pred.argmax(1) == y).type(
                         torch.float).sum().item()
+                    iteration += 1
+                with torch.no_grad():
+                    self.model.eval()
 
-            avgTrainLoss = totalTrainLoss / self.trainSteps
-            avgValLoss = totalValLoss / self.valSteps
+                    for (x,y) in self.valDataLoader:
+                        (x,y) = (x.to(self.device), y.to(self.device))
 
-            trainCorrect = trainCorrect/ len(self.trainDataLoader.dataset)
-            valCorrect = valCorrect  /len(self.valDataLoader.dataset)
+                        pred = self.model(x)
+                        totalValLoss += self.lossFn(pred, y)
 
-            self.H["train_loss"].append(avgTrainLoss.cpu().detach().numpy())
-            self.H["train_acc"].append(trainCorrect)
-            self.H["val_loss"].append(avgValLoss.cpu().detach().numpy())
-            self.H["val_acc"].append(valCorrect)
+                        valCorrect += (pred.argmax(1) == y).type(
+                            torch.float).sum().item()
 
-            print("[INFO] EPOCH: {}/{}".format(e + 1, args.EPOCH))
-            print("Train loss : {:.6f}, Train accuracay : {:.4f}".format(
-                avgTrainLoss, trainCorrect))
-            print("Val loss : {:.6f}, Val accuracay : {:.4f}".format(
-                avgValLoss, valCorrect))
-            
+                avgTrainLoss = totalTrainLoss / self.trainSteps
+                avgValLoss = totalValLoss / self.valSteps
 
+                trainCorrect = trainCorrect/ len(self.trainDataLoader.dataset)
+                valCorrect = valCorrect  /len(self.valDataLoader.dataset)
+
+                self.H["train_loss"].append(avgTrainLoss.cpu().detach().numpy())
+                self.H["train_acc"].append(trainCorrect)
+                self.H["val_loss"].append(avgValLoss.cpu().detach().numpy())
+                self.H["val_acc"].append(valCorrect)
+
+                print("[INFO] EPOCH: {}/{}".format(e + 1, args.EPOCH))
+                print("Train loss : {:.6f}, Train accuracay : {:.4f}".format(
+                    avgTrainLoss, trainCorrect))
+                print("Val loss : {:.6f}, Val accuracay : {:.4f}".format(
+                    avgValLoss, valCorrect))
+                
+        except KeyboardInterrupt:
+            if args.interrupt:
+                print('[INFO] Stopping early. Saving network...')
+                
+                SavePath.remove_interrupt(args.interrupt)
+                saved_path = save_path(e, repr(iteration) + '_interrupt')
+                torch.save(self.model, saved_path)
+            exit()
         endTime = time.time()
         print("[INFO] total time taken to trian the model : {:.2f}s".format(
         endTime - startTime))
@@ -251,6 +272,15 @@ def get_parser():
     ap.add_argument("--autoscale", action="store_true")
     ap.add_argument("--not_cuda", action="store_true")
     ap.add_argument("--augment", action="store_true")
+    ap.add_argument("--decay", action="store_true")
+    ap.add_argument("--amsgrad", action="store_true")
+    ap.add_argument("--momentum", type=int, default=0.9)
+    ap.add_argument("--num_workers", type=int, default=0)
+    ap.add_argument("--opt", type=str, default="Adam")
+    ap.add_argument("--lossFn", type=str, default="NLL")
+    ap.add_argument("--interrupt", type=str, default="./output")
+    ap.add_argument("--max_iter", type=int, default=1e10)
+
     args = ap.parse_args()
     return args
 
