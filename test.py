@@ -53,14 +53,6 @@ if __name__ == '__main__':
             idx = pred.argmax(axis=1).cpu().numpy()[0]
             predLabel = testData.dataset.classes[idx]
 
-            origImage = np.dstack([origImage] * 3)
-            origImage = imutils.resize(origImage, width=128)
-            # draw the predicted class label on it
-            color = (0, 255, 0) if gtLabel == predLabel else (0, 0, 255)
-            image = cv2.putText(origImage, gtLabel, (2, 25),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.95, color, 2)
-            # display the result in terminal and show the input image
             print("[INFO] ground truth label: {}, predicted label: {}".format(
                 gtLabel, predLabel))
-            cv2.imwrite(filename+str(label)+".jpg", image)
             
