@@ -22,11 +22,50 @@ class Trainer():
     def __init__(self, args):
         super().__init__()
         print("Training begins...")
+        if args.dataset is not None:
+            self.dataset = args.dataset
+        else : 
+            self.dataset = "KMNIST"
+        
+        if torch.cuda.device_count() == 0:
+            print('[INFO] No GPUs detected. Exiting...')
+
+        if torch.cuda.is_available():
+            if not args.not_cuda:
+                print("[INFO] CUDA device will be used")
+                #torch.set_default_tensor_type('torch.cuda.FloatTensor')
+                self.device = torch.device("cuda")
+            if  args.not_cuda:
+                print("[INFO] You have a CUDA device but choose to use the CPU")
+                self.device = torch.device("cpu")
+                #torch.set_default_tensor_type('torch.FloatTensor')
+        else:
+            print("[INFO] You don't have CUDA device installed. Use of the CPU")
+            self.device = torch.device("cpu")
+            #torch.set_default_tensor_type('torch.FloatTensor')
+
+        if args.autoscale and args.BATCH_SIZE != 8:
+            factor = args.BATCH_SIZE/8
+            self.lr = args.init_lr * factor
+            self.max_iter = args.max_iter // factor
+            self.lr_steps = [x // factor for x in args.lr_steps]
+        else:
+            self.lr = args.init_lr
+            self.max_iter = args.max_iter
+            self.lr_steps = args.lr_steps
+        self.loss_types = ['B', 'C', 'M', 'P', 'D', 'E', 'S', 'I']
+
+
+
 
     def DataLoading(self):
-        print("[INFO] loading the KMINST data...")
-        self.trainData = KMNIST(root="data", train=True, download=True, transform=ToTensor())
-        self.testData = KMNIST(root="data", train=False, download=True, transform=ToTensor())
+        if self.dataset == "KMNIST" : 
+            print("[INFO] loading the KMINST data...")
+            self.trainData = KMNIST(root="data", train=True, download=True, transform=ToTensor())
+            self.testData = KMNIST(root="data", train=False, download=True, transform=ToTensor())
+        else : 
+            print("[INFO] Other dataset will be added and code will be adapted. Use KMNIST for now.")
+            exit(1)
 
         print("[INFO] generating the train/validatiion split...")
 
@@ -51,16 +90,24 @@ class Trainer():
             "val_acc" : []
         }
         
+        #TO BE DONE : DATA AUGMENTATION
 
     def modelLoader(self):
         print("[INFO] Initializing the ConvNet model")
 
-        self.model = ConvNet(num_channels=1, classes=len(self.trainData.dataset.classes)).to(device)
+        self.model = ConvNet(num_channels=1, classes=len(self.trainData.dataset.classes))
 
-        self.opt = Adam(self.model.parameters(), lr=args.init_lr)
+        if not args.not_cuda:
+            self.model.to("cuda")
+        else:
+            self.model.to("cpu")
+
+        self.opt = Adam(self.model.parameters(), lr=self.lr)
         self.lossFn = nn.NLLLoss()
 
     def training(self):
+        trainer.DataLoading()
+        trainer.modelLoader()
 
         print("[INFO] training our neural network...")
         startTime = time.time()
@@ -75,7 +122,7 @@ class Trainer():
             valCorrect = 0
 
             for (x,y) in self.trainDataLoader:
-                (x,y) = (x.to(device), y.to(device))
+                (x,y) = (x.to(self.device), y.to(self.device))
 
                 pred =  self.model(x)
                 loss = self.lossFn(pred, y)
@@ -91,7 +138,7 @@ class Trainer():
                 self.model.eval()
 
                 for (x,y) in self.valDataLoader:
-                    (x,y) = (x.to(device), y.to(device))
+                    (x,y) = (x.to(self.device), y.to(self.device))
 
                     pred = self.model(x)
                     totalValLoss += self.lossFn(pred, y)
@@ -121,6 +168,13 @@ class Trainer():
         print("[INFO] total time taken to trian the model : {:.2f}s".format(
         endTime - startTime))
 
+
+        trainer.eval()
+
+        if args.use_plot:
+            trainer.plot()
+        trainer.save_model()
+
     def eval(self):
         print("[INFO] evaluation network")
 
@@ -129,7 +183,7 @@ class Trainer():
 
             preds = []
             for (x,y) in self.testDataLoader:
-                x = x.to(device)
+                x = x.to(self.device)
 
                 pred = self.model(x)
                 preds.extend(pred.argmax(axis=1).cpu().numpy())
@@ -174,21 +228,20 @@ def get_parser():
     ap.add_argument("--EPOCH", type=int, default=10)
     ap.add_argument("--TRAIN_SPLIT", type=int, default=0.75)
     ap.add_argument("--VAL_SPLIT", type=int, default=0.25)
+    ap.add_argument("--max_iter", type=int, default=400000)
+    ap.add_argument("--lr_steps", type=list, default=[280000, 360000, 400000])
     ap.add_argument("--get_device", default="cuda")
     ap.add_argument("--use_plot", action="store_true")
+    ap.add_argument("--dataset", default=None, type=str)
+    ap.add_argument("--autoscale", action="store_true")
+    ap.add_argument("--not_cuda", action="store_false")
     args = ap.parse_args()
     return args
 
 
 if __name__ == '__main__':
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     args = get_parser()
     trainer = Trainer(args)
-    trainer.DataLoading()
-    trainer.modelLoader()
     trainer.training()
-    trainer.eval()
-    if args.use_plot:
-        trainer.plot()
-    trainer.save_model()
+    
     
