@@ -157,6 +157,7 @@ class Trainer():
                         (x,y) = (x.to(self.device), y.to(self.device))
                     elif self.dataset == "COCO":
                         x = X
+                        #To be continued
 
                     #To be done : Data parrallelism
                     pred =  self.model(x)
