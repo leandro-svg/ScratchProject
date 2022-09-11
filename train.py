@@ -16,6 +16,7 @@ import argparse
 import torch
 import time
 from utils.functions import  SavePath
+from utils.coco import  CocoDetection
 
 
 
@@ -72,8 +73,17 @@ class Trainer():
             print("[INFO] loading the KMINST data...")
             self.trainData = KMNIST(root="data", train=True, download=True, transform=transform)
             self.testData = KMNIST(root="data", train=False, download=True, transform=transform)
-        else : 
-            print("[INFO] Other dataset will be added and code will be adapted. Use KMNIST for now.")
+        elif self.dataset == "COCO":
+            self.trainData = CocoDetection(root="./data/coco/images/train2017",
+                            annFile="data/coco/annotations/instances_train2017.json",
+                            transform=transform)
+            self.testData = CocoDetection(root="./data/coco/images/test2017",
+                            annFile="data/coco/images/image_info_test2017",
+                            transform=transform)
+            valData = CocoDetection(root="./data/coco/images/val2017",
+                            annFile="data/coco/annotations/instances_val2017.json",
+                            transform=transform)
+            print("[INFO] loading the COCO data...")
             exit(1)
 
         print("[INFO] generating the train/validation split...")
