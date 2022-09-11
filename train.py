@@ -70,29 +70,30 @@ class Trainer():
                 ToTensor(),
             ])
         if self.dataset == "KMNIST" : 
-            print("[INFO] loading the KMINST data...")
+            print("[INFO] Loading the KMINST data...")
             self.trainData = KMNIST(root="data", train=True, download=True, transform=transform)
             self.testData = KMNIST(root="data", train=False, download=True, transform=transform)
         elif self.dataset == "COCO":
+            print("[INFO] Loading the COCO data...")
             self.trainData = CocoDetection(root="./data/coco/images/train2017",
                             annFile="data/coco/annotations/instances_train2017.json",
                             transform=transform)
             self.testData = CocoDetection(root="./data/coco/images/test2017",
-                            annFile="data/coco/images/image_info_test2017",
+                            annFile="data/coco/images/image_info_test2017/annotations/image_info_test2017.json",
                             transform=transform)
             valData = CocoDetection(root="./data/coco/images/val2017",
                             annFile="data/coco/annotations/instances_val2017.json",
                             transform=transform)
-            print("[INFO] loading the COCO data...")
-            exit(1)
+            
 
         print("[INFO] generating the train/validation split...")
 
-        numTrainSamples = int(len(self.trainData)*args.TRAIN_SPLIT)
-        numValSamples = int(len(self.trainData)*args.VAL_SPLIT)
-        (self.trainData, valData) = random_split(self.trainData, 
-                                [numTrainSamples, numValSamples],
-                                generator = torch.Generator().manual_seed(42))
+        if self.dataset == "KMNIST" :
+            numTrainSamples = int(len(self.trainData)*args.TRAIN_SPLIT)
+            numValSamples = int(len(self.trainData)*args.VAL_SPLIT)
+            (self.trainData, valData) = random_split(self.trainData, 
+                                    [numTrainSamples, numValSamples],
+                                    generator = torch.Generator().manual_seed(42))
 
         self.trainDataLoader = DataLoader(self.trainData, shuffle=True, batch_size = args.BATCH_SIZE, num_workers=args.num_workers)
         self.valDataLoader = DataLoader(valData, shuffle=False, batch_size = args.BATCH_SIZE, num_workers=args.num_workers)
