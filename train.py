@@ -16,7 +16,7 @@ import argparse
 import torch
 import time
 from utils.functions import  SavePath
-from utils.coco import  CocoDetection
+from utils.coco import  CocoDetection, COCO_CLASSES 
 
 
 
@@ -84,6 +84,7 @@ class Trainer():
             valData = CocoDetection(root="./data/coco/images/val2017",
                             annFile="data/coco/annotations/instances_val2017.json",
                             transform=transform)
+            print(len(self.trainData))
             
 
         print("[INFO] generating the train/validation split...")
@@ -101,7 +102,6 @@ class Trainer():
 
         self.trainSteps = len(self.trainDataLoader.dataset) // args.BATCH_SIZE
         self.valSteps = len(self.valDataLoader.dataset) // args.BATCH_SIZE
-        
         self.H = {
             "train_loss" : [],
             "train_acc" : [],
@@ -112,7 +112,7 @@ class Trainer():
     def modelLoader(self):
         print("[INFO] Initializing the ConvNet model")
 
-        self.model = ConvNet(num_channels=1, classes=len(self.trainData.dataset.classes))
+        self.model = ConvNet(num_channels=1, classes=len(COCO_CLASSES))
 
         #To be done : Be able to stop training, save weights and begin again later on
 
@@ -149,11 +149,14 @@ class Trainer():
                 trainCorrect = 0
                 valCorrect = 0
                 iteration = 0
-                for (x,y) in self.trainDataLoader:
+                for X in self.trainDataLoader:
                     if iteration == args.max_iter:
                         break
-                    
-                    (x,y) = (x.to(self.device), y.to(self.device))
+                    if self.dataset == "KMNIST":
+                        (x,y) = X
+                        (x,y) = (x.to(self.device), y.to(self.device))
+                    elif self.dataset == "COCO":
+                        x = X
 
                     #To be done : Data parrallelism
                     pred =  self.model(x)
