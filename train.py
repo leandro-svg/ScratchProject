@@ -56,9 +56,6 @@ class Trainer():
             self.lr_steps = args.lr_steps
         self.loss_types = ['B', 'C', 'M', 'P', 'D', 'E', 'S', 'I']
 
-
-
-
     def DataLoading(self):
 
         if args.augment:
@@ -90,7 +87,6 @@ class Trainer():
         self.trainDataLoader = DataLoader(self.trainData, shuffle=True, batch_size = args.BATCH_SIZE, num_workers=args.num_workers)
         self.valDataLoader = DataLoader(valData, shuffle=False, batch_size = args.BATCH_SIZE, num_workers=args.num_workers)
         self.testDataLoader = DataLoader(self.testData, shuffle=False, batch_size = args.BATCH_SIZE, num_workers=args.num_workers)
-
 
         self.trainSteps = len(self.trainDataLoader.dataset) // args.BATCH_SIZE
         self.valSteps = len(self.valDataLoader.dataset) // args.BATCH_SIZE
