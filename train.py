@@ -71,14 +71,24 @@ class Trainer():
             ])
         else:
             transform = transforms.Compose([
-                transforms.Resize((300, 300)),
-                CutoutPIL(cutout_factor=0.5),
+                transforms.Resize((448, 448)),
+                #CutoutPIL(cutout_factor=0.5),
                 ToTensor(),
             ])
         if self.dataset == "KMNIST" : 
             print("[INFO] Loading the KMINST data...")
             self.trainData = KMNIST(root="data", train=True, download=True, transform=transform)
             self.testData = KMNIST(root="data", train=False, download=True, transform=transform)
+            print("[INFO] generating the train/validation split...")
+            numTrainSamples = int(len(self.trainData)*args.TRAIN_SPLIT)
+            numValSamples = int(len(self.trainData)*args.VAL_SPLIT)
+            (self.trainData, valData) = random_split(self.trainData, 
+                                    [numTrainSamples, numValSamples],
+                                    generator = torch.Generator().manual_seed(42))
+            self.trainDataLoader = DataLoader(self.trainData, shuffle=True, batch_size = args.BATCH_SIZE, num_workers=args.num_workers )
+            self.valDataLoader = DataLoader(valData, shuffle=False, batch_size = args.BATCH_SIZE, num_workers=args.num_workers )
+            self.testDataLoader = DataLoader(self.testData, shuffle=False, batch_size = args.BATCH_SIZE, num_workers=args.num_workers)
+
         elif self.dataset == "COCO":
             print("[INFO] Loading the COCO data...")
             self.trainData = CocoDetection(root="./data/coco/images/train2017",
@@ -90,23 +100,16 @@ class Trainer():
             valData = CocoDetection(root="./data/coco/images/val2017",
                             annFile="data/coco/annotations/instances_val2017.json",
                             transform=transform)
-            print(len(self.trainData))
-            
+            print("[INFO] generating the train/validation split...")
+            print("Len of training set", len(self.trainData))
 
-        print("[INFO] generating the train/validation split...")
-
-        if self.dataset == "KMNIST" :
-            numTrainSamples = int(len(self.trainData)*args.TRAIN_SPLIT)
-            numValSamples = int(len(self.trainData)*args.VAL_SPLIT)
-            (self.trainData, valData) = random_split(self.trainData, 
-                                    [numTrainSamples, numValSamples],
-                                    generator = torch.Generator().manual_seed(42))
-
-        self.trainDataLoader = DataLoader(self.trainData, shuffle=True, batch_size = args.BATCH_SIZE, num_workers=args.num_workers)
-        self.valDataLoader = DataLoader(valData, shuffle=False, batch_size = args.BATCH_SIZE, num_workers=args.num_workers)
-        self.testDataLoader = DataLoader(self.testData, shuffle=False, batch_size = args.BATCH_SIZE, num_workers=args.num_workers)
+            self.trainDataLoader = DataLoader(self.trainData, shuffle=True, batch_size = args.BATCH_SIZE, num_workers=args.num_workers, collate_fn=lambda x: x )
+            self.valDataLoader = DataLoader(valData, shuffle=False, batch_size = args.BATCH_SIZE, num_workers=args.num_workers, collate_fn=lambda x: x )
+            self.testDataLoader = DataLoader(self.testData, shuffle=False, batch_size = args.BATCH_SIZE, num_workers=args.num_workers, collate_fn=lambda x: x )
 
         self.trainSteps = len(self.trainDataLoader.dataset) // args.BATCH_SIZE
+        print("Len of DataLoader training", len(self.trainDataLoader.dataset))
+        print("trainStep", (self.trainSteps))
         self.valSteps = len(self.valDataLoader.dataset) // args.BATCH_SIZE
         self.H = {
             "train_loss" : [],
@@ -160,12 +163,14 @@ class Trainer():
                 trainCorrect = 0
                 valCorrect = 0
                 iteration = 0
-                for X in self.trainDataLoader:
-                    if iteration == args.max_iter:
-                        break
-                    if self.dataset == "KMNIST":
-                        (x,y) = X
+                
+                if self.dataset == "KMNIST":
+                    for X in self.trainDataLoader:
+                        if iteration == args.max_iter:
+                            break
+                        print("[INFO] Looping on KMNIST dataset")
                         (x,y) = (x.to(self.device), y.to(self.device))
+                        print("x shape", np.shape(x))
                         pred =  self.model(x)
                         loss = self.lossFn(pred, y)
 
@@ -174,10 +179,32 @@ class Trainer():
                         if torch.isfinite(loss).item():
                             #self.scheduler.step(loss)
                             self.opt.step()
-                    elif self.dataset == "COCO":
-                        (x,y) = X
-                        (x,y) = (x.to(self.device), y.to(self.device))
+                    
+                elif self.dataset == "COCO":
+                    for X in self.trainDataLoader:
+                        if iteration == args.max_iter:
+                            break
+                        print("[INFO] Looping on COCO dataset")
+                        label = torch.tensor([])
+                        images = torch.tensor([])
+                        iteration=0
+                        for input in X:
+                            iteration += 1
+                            try:
+                                label = torch.cat((label, torch.tensor([input[1][0]['category_id']])))
+                                images = torch.cat((images, (input[0])))
+                            except:
+                                pass    
+
+                        images = images.reshape([int(np.shape(images)[0]/3),3,448,448])
+                        images = images[:,1,:,:].unsqueeze(0)
+                        images = images.permute(1,0,2,3)
+
+                        (x,y) = (images.to(self.device), label.to(self.device))
                         pred =  self.model(x)
+                        print(pred)
+                        print("Shape of pred", np.shape(pred))
+                        print("Shape of label", np.shape(y))
                         loss = criterion(pred, y)
 
                         self.opt.zero_grad()
