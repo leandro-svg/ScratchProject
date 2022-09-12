@@ -18,7 +18,7 @@ import time
 from utils.functions import  SavePath
 from utils.coco import  CocoDetection, COCO_CLASSES 
 
-
+print("Training begins")
 
 class Trainer():
     def __init__(self, args):
