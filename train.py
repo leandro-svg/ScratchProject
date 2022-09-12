@@ -16,8 +16,9 @@ import argparse
 import torch
 import time
 from utils.functions import  SavePath
-from utils.coco import  CocoDetection, COCO_CLASSES 
-
+from utils.coco import  CocoDetection, COCO_CLASSES, CutoutPIL
+import torch.optim as optim
+from utils.loss_coco import AsymmetricLoss
 
 print("Training begins")
 
@@ -66,9 +67,12 @@ class Trainer():
                 RandomRotation(degrees=(0, 180)),
                 ToTensor(),
                 transforms.ColorJitter(brightness=.5, hue=.3),
+                transforms.Resize((448, 448))
             ])
         else:
             transform = transforms.Compose([
+                transforms.Resize((300, 300)),
+                CutoutPIL(cutout_factor=0.5),
                 ToTensor(),
             ])
         if self.dataset == "KMNIST" : 
@@ -127,6 +131,11 @@ class Trainer():
         elif args.opt == "SGD":
             self.opt = SGD(self.model.parameters(), lr=self.lr, weight_decay = args.decay, momentum = args.momentum)
 
+        self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(self.opt, mode='min',
+                                                             factor=args.lr_reduce_factor,
+                                                             patience=args.lr_schedule_patience,
+                                                             verbose=True, min_lr=args.min_lr)
+
         if args.lossFn == "NLL":
             self.lossFn = nn.NLLLoss()
         elif args.lossFn == "CrossEntropy":
@@ -136,7 +145,7 @@ class Trainer():
 
         trainer.DataLoading()
         trainer.modelLoader()
-
+        criterion = AsymmetricLoss(gamma_neg=4, gamma_pos=0, clip=0.05, disable_torch_grad_focal_loss=True)
         save_path = lambda epoch, iteration: SavePath("model", epoch, iteration).get_path(root=args.interrupt)
 
         print("[INFO] training our neural network...")
@@ -157,19 +166,27 @@ class Trainer():
                     if self.dataset == "KMNIST":
                         (x,y) = X
                         (x,y) = (x.to(self.device), y.to(self.device))
+                        pred =  self.model(x)
+                        loss = self.lossFn(pred, y)
+
+                        self.opt.zero_grad()
+                        loss.backward()
+                        if torch.isfinite(loss).item():
+                            #self.scheduler.step(loss)
+                            self.opt.step()
                     elif self.dataset == "COCO":
-                        x = X
-                        #TO BE CONTINUED
+                        (x,y) = X
+                        (x,y) = (x.to(self.device), y.to(self.device))
+                        pred =  self.model(x)
+                        loss = criterion(pred, y)
+
+                        self.opt.zero_grad()
+                        loss.backward()
+                        if torch.isfinite(loss).item():
+                             #self.scheduler.step(loss)
+                             self.opt.step()
 
                     #To be done : Data parrallelism
-                    pred =  self.model(x)
-                    loss = self.lossFn(pred, y)
-
-                    self.opt.zero_grad()
-                    loss.backward()
-                    if torch.isfinite(loss).item():
-                        self.opt.step()
-
                     totalTrainLoss += loss
                     trainCorrect += (pred.argmax(1) == y).type(
                         torch.float).sum().item()
@@ -178,10 +195,18 @@ class Trainer():
                     self.model.eval()
 
                     for (x,y) in self.valDataLoader:
-                        (x,y) = (x.to(self.device), y.to(self.device))
+                        if iteration == args.max_iter:
+                            break
+                        if self.dataset == "KMNIST":
+                            (x,y) = (x.to(self.device), y.to(self.device))
+                            pred =  self.model(x)
+                            totalValLoss += self.lossFn(pred, y)
 
-                        pred = self.model(x)
-                        totalValLoss += self.lossFn(pred, y)
+                        elif self.dataset == "COCO":
+                            (x,y) = (x.to(self.device), y.to(self.device))
+                            pred =  self.model(x)
+                            totalValLoss += criterion(pred, y)
+
 
                         valCorrect += (pred.argmax(1) == y).type(
                             torch.float).sum().item()
@@ -270,11 +295,11 @@ def get_parser():
                     type=str, 
                     required=True, 
                     help="path to output loss/accuracy plot")
-    ap.add_argument("--init_lr", type=int, default=1e-3)
+    ap.add_argument("--init_lr", type=float, default=1e-3)
     ap.add_argument("--BATCH_SIZE", type=int, default=64)
     ap.add_argument("--EPOCH", type=int, default=10)
-    ap.add_argument("--TRAIN_SPLIT", type=int, default=0.75)
-    ap.add_argument("--VAL_SPLIT", type=int, default=0.25)
+    ap.add_argument("--TRAIN_SPLIT", type=float, default=0.75)
+    ap.add_argument("--VAL_SPLIT", type=float, default=0.25)
     ap.add_argument("--max_iter", type=int, default=400000)
     ap.add_argument("--lr_steps", type=list, default=[280000, 360000, 400000])
     ap.add_argument("--get_device", default="cuda")
@@ -285,11 +310,14 @@ def get_parser():
     ap.add_argument("--augment", action="store_true")
     ap.add_argument("--decay", action="store_true")
     ap.add_argument("--amsgrad", action="store_true")
-    ap.add_argument("--momentum", type=int, default=0.9)
+    ap.add_argument("--momentum", type=float, default=0.9)
     ap.add_argument("--num_workers", type=int, default=0)
     ap.add_argument("--opt", type=str, default="Adam")
     ap.add_argument("--lossFn", type=str, default="NLL")
     ap.add_argument("--interrupt", type=str, default="./output")
+    ap.add_argument('--lr_reduce_factor', type=float, default=0.5, help="Please give a value for lr_reduce_factor")
+    ap.add_argument('--lr_schedule_patience', type=int, default=5, help="Please give a value for lr_schedule_patience")
+    ap.add_argument('--min_lr', type=float, default=1e-6, help="Please give a value for min_lr")
 
     args = ap.parse_args()
     return args

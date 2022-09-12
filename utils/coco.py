@@ -2,6 +2,10 @@ import torch.utils.data as data
 from PIL import Image
 import os
 import os.path
+import numpy as np
+import random
+from PIL import ImageDraw
+
 
 COCO_CLASSES = ('person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus',
                 'train', 'truck', 'boat', 'traffic light', 'fire hydrant',
@@ -28,6 +32,28 @@ COCO_LABEL_MAP = { 1:  1,  2:  2,  3:  3,  4:  4,  5:  5,  6:  6,  7:  7,  8:  8
                   62: 57, 63: 58, 64: 59, 65: 60, 67: 61, 70: 62, 72: 63, 73: 64,
                   74: 65, 75: 66, 76: 67, 77: 68, 78: 69, 79: 70, 80: 71, 81: 72,
                   82: 73, 84: 74, 85: 75, 86: 76, 87: 77, 88: 78, 89: 79, 90: 80}
+
+class CutoutPIL(object):
+    def __init__(self, cutout_factor=0.5):
+        self.cutout_factor = cutout_factor
+
+    def __call__(self, x):
+        img_draw = ImageDraw.Draw(x)
+        h, w = x.size[0], x.size[1]  # HWC
+        h_cutout = int(self.cutout_factor * h + 0.5)
+        w_cutout = int(self.cutout_factor * w + 0.5)
+        y_c = np.random.randint(h)
+        x_c = np.random.randint(w)
+
+        y1 = np.clip(y_c - h_cutout // 2, 0, h)
+        y2 = np.clip(y_c + h_cutout // 2, 0, h)
+        x1 = np.clip(x_c - w_cutout // 2, 0, w)
+        x2 = np.clip(x_c + w_cutout // 2, 0, w)
+        fill_color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+        img_draw.rectangle([x1, y1, x2, y2], fill=fill_color)
+
+        return x
+
 class CocoCaptions(data.Dataset):
     """`MS Coco Captions <http://mscoco.org/dataset/#captions-challenge2015>`_ Dataset.
 
