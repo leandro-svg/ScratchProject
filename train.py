@@ -19,7 +19,7 @@ from utils.functions import  SavePath
 from utils.coco import  CocoDetection, COCO_CLASSES 
 
 
-
+print("[INFO] Training begins")
 class Trainer():
     def __init__(self, args):
         super().__init__()
@@ -157,7 +157,7 @@ class Trainer():
                         (x,y) = (x.to(self.device), y.to(self.device))
                     elif self.dataset == "COCO":
                         x = X
-                        #To be continued
+                        #TO BE CONTINUED
 
                     #To be done : Data parrallelism
                     pred =  self.model(x)
