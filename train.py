@@ -19,7 +19,9 @@ from utils.functions import  SavePath
 from utils.coco import  CocoDetection, COCO_CLASSES 
 
 
-print("[INFO] Training begins")
+print("Training begins")
+
+
 class Trainer():
     def __init__(self, args):
         super().__init__()
