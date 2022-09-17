@@ -171,8 +171,9 @@ class Trainer():
                 if self.dataset == "KMNIST":
                     print("[INFO] Training on KMNIST dataset")
                     for x,y in self.trainDataLoader:
-                        #if iteration == args.max_iter:
-                         #   break
+                        print(iteration)
+                        if iteration == args.max_iter:
+                            break
                         
                         (x,y) = (x.to(self.device), y.to(self.device))
                         pred =  self.model(x)
@@ -194,14 +195,12 @@ class Trainer():
                         
                         label = torch.tensor([])
                         images = torch.tensor([])
-                        iteration=0
                         for input in X:
-                            iteration += 1
                             try:
                                 label = torch.cat((label, torch.tensor([input[1][0]['category_id']])))
                                 images = torch.cat((images, (input[0])))
                             except:
-                                pass    
+                                pass   
 
                         images = images.reshape([int(np.shape(images)[0]/3),3,448,448])
                         images = images[:,1,:,:].unsqueeze(0)
@@ -221,11 +220,8 @@ class Trainer():
                         if torch.isfinite(loss).item():
                              #self.scheduler.step(loss)
                              self.opt.step()
-                
-                #To be done : Data parrallelism
                         totalTrainLoss += loss
-                        trainCorrect += (pred.argmax(1) == y).type(
-                            torch.float).sum().item()
+                        trainCorrect += (pred.argmax(1) == y).type(torch.float).sum().item()
                         iteration += 1
                 with torch.no_grad():
                     print("[INFO] Evaluating ...")
