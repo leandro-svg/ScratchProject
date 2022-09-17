@@ -1,6 +1,3 @@
-import torch
-import torchvision
-import numpy
 from torch.nn import Conv2d, Module, Linear, MaxPool2d, ReLU, LogSoftmax
 from torch import flatten
 

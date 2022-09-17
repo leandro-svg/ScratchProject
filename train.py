@@ -18,10 +18,10 @@ import argparse
 import torch
 import time
 from utils.functions import  SavePath
-from utils.coco import  CocoDetection, COCO_CLASSES, CutoutPIL
+from utils.coco import  CocoDetection, COCO_CLASSES, CutoutPIL, COCO_LABEL_MAP
 import torch.optim as optim
 from utils.loss_coco import AsymmetricLoss
-
+CUDA_LAUNCH_BLOCKING=1
 
 class Trainer():
     def __init__(self, args):
@@ -126,7 +126,7 @@ class Trainer():
             self.model = LeandNet(num_channels=1, classes=len(self.trainData.dataset.classes))
         elif self.dataset == "COCO":
             print("[INFO] Using ConvNet...")
-            self.model = ConvNet(num_channels=1, classes=len(COCO_CLASSES))
+            self.model = ConvNet(num_channels=1, classes=len(COCO_CLASSES)+1) 
         #To be done : Be able to stop training, save weights and begin again later on
 
         if not args.not_cuda:
@@ -169,7 +169,7 @@ class Trainer():
                 iteration = 0
                 
                 if self.dataset == "KMNIST":
-                    print("[INFO] Looping on KMNIST dataset")
+                    print("[INFO] Training on KMNIST dataset")
                     for x,y in self.trainDataLoader:
                         #if iteration == args.max_iter:
                          #   break
@@ -186,12 +186,12 @@ class Trainer():
                         trainCorrect += (pred.argmax(1) == y).type(
                             torch.float).sum().item()
                         iteration += 1
-                    
                 elif self.dataset == "COCO":
+                    print("[INFO] Training on COCO dataset")
                     for X in self.trainDataLoader:
                         if iteration == args.max_iter:
                             break
-                        print("[INFO] Looping on COCO dataset")
+                        
                         label = torch.tensor([])
                         images = torch.tensor([])
                         iteration=0
@@ -210,9 +210,12 @@ class Trainer():
                         (x,y) = (images.to(self.device), label.to(self.device))
                         pred =  self.model(x)
                         #loss = criterion(pred, y)
-                        y = torch.tensor(y.cpu().detach().numpy().astype(int)).to(self.device)
-                        
+                        y = (y.cpu().detach().numpy().astype(int))
+                        for elem in range(len(y)):
+                            y[elem] = COCO_LABEL_MAP[y[elem]]
+                        y = torch.tensor(y).to(self.device)
                         loss = self.lossFn(pred, y)
+                        
                         self.opt.zero_grad()
                         loss.backward()
                         if torch.isfinite(loss).item():
@@ -225,6 +228,7 @@ class Trainer():
                             torch.float).sum().item()
                         iteration += 1
                 with torch.no_grad():
+                    print("[INFO] Evaluating ...")
                     self.model.eval()
 
                     for (x,y) in self.valDataLoader:
@@ -236,9 +240,28 @@ class Trainer():
                             totalValLoss += self.lossFn(pred, y)
 
                         elif self.dataset == "COCO":
-                            (x,y) = (x.to(self.device), y.to(self.device))
+                            label = torch.tensor([])
+                            images = torch.tensor([])
+                            iteration=0
+                            for input in X:
+                                iteration += 1
+                                try:
+                                    label = torch.cat((label, torch.tensor([input[1][0]['category_id']])))
+                                    images = torch.cat((images, (input[0])))
+                                except:
+                                    pass    
+
+                            images = images.reshape([int(np.shape(images)[0]/3),3,448,448])
+                            images = images[:,1,:,:].unsqueeze(0)
+                            images = images.permute(1,0,2,3)
+
+                            (x,y) = (images.to(self.device), label.to(self.device))
                             pred =  self.model(x)
-                            totalValLoss += criterion(pred, y)
+                            y = (y.cpu().detach().numpy().astype(int))
+                            for elem in range(len(y)):
+                                y[elem] = COCO_LABEL_MAP[y[elem]]
+                            y = torch.tensor(y).to(self.device)
+                            totalValLoss += self.lossFn(pred, y)
 
 
                         valCorrect += (pred.argmax(1) == y).type(
