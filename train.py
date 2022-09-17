@@ -1,4 +1,6 @@
 import matplotlib
+
+from model.LeandDetect import LeandNet
 matplotlib.use("Agg")
 from model.ConvNet import ConvNet
 from sklearn.metrics import classification_report
@@ -62,21 +64,12 @@ class Trainer():
 
     def DataLoading(self):
 
-        if args.augment:
-            transform = transforms.Compose([
-                RandomRotation(degrees=(0, 180)),
-                ToTensor(),
-                transforms.ColorJitter(brightness=.5, hue=.3),
-                transforms.Resize((448, 448))
-            ])
-        else:
-            transform = transforms.Compose([
-                transforms.Resize((448, 448)),
-                #CutoutPIL(cutout_factor=0.5),
-                ToTensor(),
-            ])
+        
         if self.dataset == "KMNIST" : 
             print("[INFO] Loading the KMINST data...")
+            transform = transforms.Compose([
+                    ToTensor(),
+                ])
             self.trainData = KMNIST(root="data", train=True, download=True, transform=transform)
             self.testData = KMNIST(root="data", train=False, download=True, transform=transform)
             print("[INFO] generating the train/validation split...")
@@ -91,6 +84,19 @@ class Trainer():
 
         elif self.dataset == "COCO":
             print("[INFO] Loading the COCO data...")
+            if args.augment:
+                transform = transforms.Compose([
+                    RandomRotation(degrees=(0, 180)),
+                    ToTensor(),
+                    transforms.ColorJitter(brightness=.5, hue=.3),
+                    transforms.Resize((448, 448))
+                ])
+            else:
+                transform = transforms.Compose([
+                    transforms.Resize((448, 448)),
+                    #CutoutPIL(cutout_factor=0.5),
+                    ToTensor(),
+                ])
             self.trainData = CocoDetection(root="./data/coco/images/train2017",
                             annFile="data/coco/annotations/instances_train2017.json",
                             transform=transform)
@@ -108,8 +114,6 @@ class Trainer():
             self.testDataLoader = DataLoader(self.testData, shuffle=False, batch_size = args.BATCH_SIZE, num_workers=args.num_workers, collate_fn=lambda x: x )
 
         self.trainSteps = len(self.trainDataLoader.dataset) // args.BATCH_SIZE
-        print("Len of DataLoader training", len(self.trainDataLoader.dataset))
-        print("trainStep", (self.trainSteps))
         self.valSteps = len(self.valDataLoader.dataset) // args.BATCH_SIZE
         self.H = {
             "train_loss" : [],
@@ -120,9 +124,13 @@ class Trainer():
 
     def modelLoader(self):
         print("[INFO] Initializing the ConvNet model")
-
-        self.model = ConvNet(num_channels=1, classes=len(COCO_CLASSES))
-
+        if self.dataset == "KMNIST" :
+            print("[INFO] Using LeandNet...")
+            self.model = LeandNet(num_channels=1, classes=len(self.trainData.dataset.classes))
+        elif self.dataset == "COCO":
+            print("[INFO] Using ConvNet...")
+            self.model = ConvNet(num_channels=1, classes=len(COCO_CLASSES))
+            print("Len classes", len(COCO_CLASSES))
         #To be done : Be able to stop training, save weights and begin again later on
 
         if not args.not_cuda:
@@ -165,20 +173,23 @@ class Trainer():
                 iteration = 0
                 
                 if self.dataset == "KMNIST":
-                    for X in self.trainDataLoader:
-                        if iteration == args.max_iter:
-                            break
-                        print("[INFO] Looping on KMNIST dataset")
+                    print("[INFO] Looping on KMNIST dataset")
+                    for x,y in self.trainDataLoader:
+                        #if iteration == args.max_iter:
+                         #   break
+                        
                         (x,y) = (x.to(self.device), y.to(self.device))
-                        print("x shape", np.shape(x))
                         pred =  self.model(x)
                         loss = self.lossFn(pred, y)
-
                         self.opt.zero_grad()
                         loss.backward()
                         if torch.isfinite(loss).item():
                             #self.scheduler.step(loss)
                             self.opt.step()
+                        totalTrainLoss += loss
+                        trainCorrect += (pred.argmax(1) == y).type(
+                            torch.float).sum().item()
+                        iteration += 1
                     
                 elif self.dataset == "COCO":
                     for X in self.trainDataLoader:
@@ -202,10 +213,11 @@ class Trainer():
 
                         (x,y) = (images.to(self.device), label.to(self.device))
                         pred =  self.model(x)
-                        print(pred)
-                        print("Shape of pred", np.shape(pred))
-                        print("Shape of label", np.shape(y))
-                        loss = criterion(pred, y)
+                        print(y)
+                        print(np.shape(x))
+                        print(pred[0])
+                        #loss = criterion(pred, y)
+                        loss = self.lossFn(pred, y)
 
                         self.opt.zero_grad()
                         loss.backward()
@@ -213,11 +225,11 @@ class Trainer():
                              #self.scheduler.step(loss)
                              self.opt.step()
 
-                    #To be done : Data parrallelism
-                    totalTrainLoss += loss
-                    trainCorrect += (pred.argmax(1) == y).type(
-                        torch.float).sum().item()
-                    iteration += 1
+                #To be done : Data parrallelism
+                        totalTrainLoss += loss
+                        trainCorrect += (pred.argmax(1) == y).type(
+                            torch.float).sum().item()
+                        iteration += 1
                 with torch.no_grad():
                     self.model.eval()
 
