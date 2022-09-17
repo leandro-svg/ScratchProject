@@ -171,7 +171,6 @@ class Trainer():
                 if self.dataset == "KMNIST":
                     print("[INFO] Training on KMNIST dataset")
                     for x,y in self.trainDataLoader:
-                        print(iteration)
                         if iteration == args.max_iter:
                             break
                         
@@ -224,21 +223,26 @@ class Trainer():
                         trainCorrect += (pred.argmax(1) == y).type(torch.float).sum().item()
                         iteration += 1
                 with torch.no_grad():
-                    print("[INFO] Evaluating ...")
                     self.model.eval()
-
-                    for (x,y) in self.valDataLoader:
-                        if iteration == args.max_iter:
-                            break
-                        if self.dataset == "KMNIST":
+                    if self.dataset == "KMNIST":
+                        print("[INFO] Evaluationg on KMNIST dataset")
+                        for (x,y) in self.valDataLoader:
+                            if iteration == args.max_iter:
+                                break
+                            
                             (x,y) = (x.to(self.device), y.to(self.device))
                             pred =  self.model(x)
                             totalValLoss += self.lossFn(pred, y)
+                            valCorrect += (pred.argmax(1) == y).type(
+                                torch.float).sum().item()  
 
-                        elif self.dataset == "COCO":
+                    elif self.dataset == "COCO":
+                        for X in self.trainDataLoader:
+                            if iteration == args.max_iter:
+                                break
                             label = torch.tensor([])
                             images = torch.tensor([])
-                            iteration=0
+                            
                             for input in X:
                                 iteration += 1
                                 try:
@@ -259,13 +263,12 @@ class Trainer():
                             y = torch.tensor(y).to(self.device)
                             totalValLoss += self.lossFn(pred, y)
 
-
-                        valCorrect += (pred.argmax(1) == y).type(
-                            torch.float).sum().item()
+                            valCorrect += (pred.argmax(1) == y).type(
+                                torch.float).sum().item()
 
                 avgTrainLoss = totalTrainLoss / self.trainSteps
                 avgValLoss = totalValLoss / self.valSteps
-
+                print(avgValLoss)
                 trainCorrect = trainCorrect/ len(self.trainDataLoader.dataset)
                 valCorrect = valCorrect  /len(self.valDataLoader.dataset)
 
