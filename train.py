@@ -22,8 +22,6 @@ from utils.coco import  CocoDetection, COCO_CLASSES, CutoutPIL
 import torch.optim as optim
 from utils.loss_coco import AsymmetricLoss
 
-print("Training begins")
-
 
 class Trainer():
     def __init__(self, args):
@@ -107,7 +105,6 @@ class Trainer():
                             annFile="data/coco/annotations/instances_val2017.json",
                             transform=transform)
             print("[INFO] generating the train/validation split...")
-            print("Len of training set", len(self.trainData))
 
             self.trainDataLoader = DataLoader(self.trainData, shuffle=True, batch_size = args.BATCH_SIZE, num_workers=args.num_workers, collate_fn=lambda x: x )
             self.valDataLoader = DataLoader(valData, shuffle=False, batch_size = args.BATCH_SIZE, num_workers=args.num_workers, collate_fn=lambda x: x )
@@ -130,7 +127,6 @@ class Trainer():
         elif self.dataset == "COCO":
             print("[INFO] Using ConvNet...")
             self.model = ConvNet(num_channels=1, classes=len(COCO_CLASSES))
-            print("Len classes", len(COCO_CLASSES))
         #To be done : Be able to stop training, save weights and begin again later on
 
         if not args.not_cuda:
@@ -213,18 +209,16 @@ class Trainer():
 
                         (x,y) = (images.to(self.device), label.to(self.device))
                         pred =  self.model(x)
-                        print(y)
-                        print(np.shape(x))
-                        print(pred[0])
                         #loss = criterion(pred, y)
+                        y = torch.tensor(y.cpu().detach().numpy().astype(int)).to(self.device)
+                        
                         loss = self.lossFn(pred, y)
-
                         self.opt.zero_grad()
                         loss.backward()
                         if torch.isfinite(loss).item():
                              #self.scheduler.step(loss)
                              self.opt.step()
-
+                
                 #To be done : Data parrallelism
                         totalTrainLoss += loss
                         trainCorrect += (pred.argmax(1) == y).type(
@@ -266,7 +260,7 @@ class Trainer():
                     avgTrainLoss, trainCorrect))
                 print("Val loss : {:.6f}, Val accuracay : {:.4f}".format(
                     avgValLoss, valCorrect))
-                
+
         except KeyboardInterrupt:
             if args.interrupt:
                 print('[INFO] Stopping early. Saving network...')
