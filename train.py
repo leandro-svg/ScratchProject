@@ -222,6 +222,7 @@ class Trainer():
                         totalTrainLoss += loss
                         trainCorrect += (pred.argmax(1) == y).type(torch.float).sum().item()
                         iteration += 1
+                iteration = 0
                 with torch.no_grad():
                     self.model.eval()
                     if self.dataset == "KMNIST":
@@ -229,7 +230,6 @@ class Trainer():
                         for (x,y) in self.valDataLoader:
                             if iteration == args.max_iter:
                                 break
-                            
                             (x,y) = (x.to(self.device), y.to(self.device))
                             pred =  self.model(x)
                             totalValLoss += self.lossFn(pred, y)
@@ -244,7 +244,6 @@ class Trainer():
                             images = torch.tensor([])
                             
                             for input in X:
-                                iteration += 1
                                 try:
                                     label = torch.cat((label, torch.tensor([input[1][0]['category_id']])))
                                     images = torch.cat((images, (input[0])))
@@ -268,13 +267,16 @@ class Trainer():
 
                 avgTrainLoss = totalTrainLoss / self.trainSteps
                 avgValLoss = totalValLoss / self.valSteps
-                print(avgValLoss)
+                print(totalValLoss)
+                print(self.valSteps)
                 trainCorrect = trainCorrect/ len(self.trainDataLoader.dataset)
                 valCorrect = valCorrect  /len(self.valDataLoader.dataset)
 
                 self.H["train_loss"].append(avgTrainLoss.cpu().detach().numpy())
                 self.H["train_acc"].append(trainCorrect)
+                print("avgvalloss", avgValLoss)
                 self.H["val_loss"].append(avgValLoss.cpu().detach().numpy())
+                print("avgvalloss", avgValLoss)
                 self.H["val_acc"].append(valCorrect)
 
                 print("[INFO] EPOCH: {}/{}".format(e + 1, args.EPOCH))
